@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Netflix",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

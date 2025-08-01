@@ -1,4 +1,3 @@
-
 from django.contrib.auth import get_user_model
 from django.core.validators import MinLengthValidator, MaxLengthValidator
 from django.db import models
@@ -11,7 +10,7 @@ class TimeStempModel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        abstract = True
+        abstract = True  # table yaratilmaydi
 
 
 class Genre(models.Model):
@@ -22,7 +21,7 @@ class Genre(models.Model):
 
 
 class Content(TimeStempModel):
-    genre = models.ManyToManyField(Genre, related_name='contents')
+    genres = models.ManyToManyField(Genre, related_name='contents')
     director = models.CharField(max_length=50)
     title = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True,
@@ -43,3 +42,12 @@ class Content(TimeStempModel):
     class Meta:
         unique_together = ('title', 'director')
         ordering = ['-release_date']
+
+
+class Profile(models.Model):
+    user = models.OneToOneField(User, related_name='profile', on_delete=models.CASCADE)
+    phone = models.CharField(max_length=15, unique=True)
+    img = models.ImageField(upload_to='profile', blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.user.username}: {self.phone}"
