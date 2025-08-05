@@ -1,10 +1,16 @@
 from rest_framework import status
+from rest_framework.authentication import BasicAuthentication, SessionAuthentication
 from rest_framework.decorators import api_view
+from rest_framework.generics import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet
 
-from movie.models import Genre, Content, User
-from movie.serializers import GenreSerializer, ContentSerializer, UserProfileSerializer, UserSerializer
-from django.db.models import Q
+from movie.models import Genre, Content, User, WatchedHistory
+from movie.serializers import GenreSerializer, ContentSerializer, UserProfileSerializer, UserSerializer, \
+    WatchedHistorySerializer, UserStatisticsSerializer
+from django.db.models import Q, Count, Sum
 
 
 # CRUD
@@ -187,3 +193,71 @@ def user_nested_retrieve_update_or_delete(request, pk, format=None):
     elif request.method == "DELETE":
         user.delete()
         return Response({"message": "Object is deleted!"}, status=status.HTTP_204_NO_CONTENT)
+
+
+class GenreListView(APIView):  # Lis
+    def get(self, request, format=None):
+        genres = Genre.objects.all()
+        search = request.query_params.get('search', None)
+        if search:
+            genres = genres.filter(name__icontains=search)
+        serializer = GenreSerializer(genres, many=True)
+        content = Content.objects.filter(genres__in=genres).count()
+        return Response({
+            "total_genres": genres.count(),
+            "total_films": content,
+            "genres": serializer.data},
+            status=status.HTTP_200_OK)
+
+
+class GenreViewSet(ModelViewSet):  # CRUD
+    queryset = Genre.objects.all()
+    serializer_class = GenreSerializer
+
+
+class WatchedHistoryView(APIView):
+    def get(self, request):
+        histories = WatchedHistory.objects.filter(is_delete=False)
+        serializer = WatchedHistorySerializer(histories, many=True)
+        films = WatchedHistory.objects.aggregate(
+            watched_films_count=Count('id'),
+            history_clear=Count('id', filter=Q(is_delete=True))
+        )
+        return Response({
+            "watched_films_count": films['watched_films_count'],
+            "history_clear": films['history_clear'],
+            "histories": serializer.data
+        })
+
+    def post(self, request):
+        serializer = WatchedHistorySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class WatchedHistoryDestroyView(APIView):
+
+    def get_object(self, pk):
+        return get_object_or_404(WatchedHistory, id=pk, is_delete=False)
+
+    def delete(self, request, pk):
+        obj = self.get_object(pk)
+        obj.is_delete = True
+        obj.save()
+        return Response({"message": "Object is deleted!"}, status=status.HTTP_204_NO_CONTENT)
+
+
+class UserStatisticsView(APIView):
+    # authentication_classes = [BasicAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, requst):
+        films = User.objects.annotate(watched_films_count=Count('watched_history')).order_by('-watched_films_count')
+
+        serializer = UserStatisticsSerializer(films, many=True)
+        films = films.aggregate(watched_films=Sum('watched_films_count'))
+        return Response({
+            "watched_films": films['watched_films'],
+            "watched_films_count_by_each_user": serializer.data
+        })
